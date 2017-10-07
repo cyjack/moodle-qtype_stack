@@ -214,6 +214,16 @@ For example, the question variables could be something like
     i3:"<img src='http://www.maths.ed.ac.uk/~csangwin/Pics/z3.jpg' />"
     ta:[[1,true,i1],[2,false,i2],[3,false,i3]]
 
+## Adding in an optional "other" algebraic field. ##
+
+It is possible to add in an option to put an algebraic input field after the MCQ.  This enables a teacher to write a question which says "choose one of these, or provide your own answer".  This illustrates one of the advantages of the MCQ inputs genuinely returning a CAS expression.  Comments on this are given here [elsewhere](https://community.articulate.com/articles/how-to-use-an-other-please-specify-answer-option).  This is available for the radio, dropdown and checkbox MCQ inputs.  With the checkbox only one algebraic input box is provided for a single additional response.
+
+To include an algebraic input, use the special `alginput` option in the teacher's answer list as a 4th element of the list.  The optional third element is used to put text in front of the input. 
+
+The following example illustrates the use of this feature.
+
+    p:sin(2*x);
+    ta:[[diff(p,x),true],[p,false],[int(p,x),false],[cos(2*x)+c,false],[x^2,false,"Other: ",alginput]];
 
 ## Writing question tests ##
 

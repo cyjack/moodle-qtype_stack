@@ -30,6 +30,7 @@ class stack_algebraic_input extends stack_input {
             return $this->render_error($this->errors);
         }
 
+        // The following code is also duplicated in dropdown render_algebraic.
         $size = $this->parameters['boxWidth'] * 0.9 + 0.1;
         $attributes = array(
             'type'  => 'text',

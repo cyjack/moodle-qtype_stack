@@ -310,9 +310,9 @@ abstract class stack_input {
         if (!is_a($options, 'stack_options')) {
             throw new stack_exception('stack_input: validate_student_response: options not of class stack_options');
         }
+
         $localoptions = clone $options;
         $localoptions->set_option('simplify', false);
-
         if ($ajaxinput) {
             $response = $this->ajax_to_response_array($response);
         }

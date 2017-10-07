@@ -12,4 +12,6 @@ To do for version 4.1:
 * Remove hard-coded "not answered" option from Radio input type.
 * (Done) On the questiontestrun page, have options to (a) delete all question variants.
 * (Done) Make SVG the default image format in Maxima generate plots.
+* (Done) Add in the option to add in an algebraic input box to an MCQ input type: https://community.articulate.com/articles/how-to-use-an-other-please-specify-answer-option
 * Enable individual questions to load Maxima libraries.  (See issue #305).
+

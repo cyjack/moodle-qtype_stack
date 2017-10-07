@@ -60,6 +60,12 @@ class stack_dropdown_input extends stack_input {
      */
     protected $teacheranswerdisplay = '';
 
+    /*
+     * These fields control whether or not an additional "algebraic" input type is shown to the students.
+     */
+    protected $algebraic = false;
+    protected $algebraictext = '';
+
     protected function internal_contruct() {
         $options = $this->get_parameter('options');
         if (trim($options) != '') {
@@ -163,6 +169,7 @@ class stack_dropdown_input extends stack_input {
                         $this->errors[] = stack_string('ddl_duplicates');
                     }
                     $duplicatevalues[$value[0]] = true;
+
                     // Store the answers.
                     $ddlvalue['value'] = $value[0];
                     $ddlvalue['display'] = $value[0];
@@ -179,7 +186,20 @@ class stack_dropdown_input extends stack_input {
                         $correctanswer[] = $ddlvalue['value'];
                         $correctanswerdisplay[] = $ddlvalue['display'];
                     }
-                    $ddlvalues[] = $ddlvalue;
+                    // If there is a 4th option in the list.
+                    if (array_key_exists(3, $value) && strtolower($value[3]) == 'alginput') {
+                        $this->algebraic = true;
+                        if (array_key_exists(2, $value)) {
+                            // Strip off any quote marks.
+                            $algtext = trim($value[2]);
+                            if (substr($algtext, 0, 1) == '"') {
+                                $algtext = substr($algtext, 1, -1);
+                            }
+                            $this->algebraictext = $algtext;
+                        }
+                    } else {
+                        $ddlvalues[] = $ddlvalue;
+                    }
                 } else {
                     $this->errors[] = stack_string('ddl_badanswer', $teacheranswer);
                 }
@@ -298,19 +318,10 @@ class stack_dropdown_input extends stack_input {
     }
 
     protected function extra_validation($contents) {
-        if (!array_key_exists($contents[0], $this->get_choices())) {
+        if (!$this->algebraic && !array_key_exists($contents[0], $this->get_choices())) {
             return stack_string('dropdowngotunrecognisedvalue');
         }
         return '';
-    }
-
-    protected function validate_contents($contents, $forbiddenkeys, $localoptions) {
-        $valid = true;
-        $errors = $this->errors;
-        $modifiedcontents = $contents;
-        $caslines = array();
-
-        return array($valid, $errors, $modifiedcontents, $caslines);
     }
 
     /**
@@ -320,7 +331,7 @@ class stack_dropdown_input extends stack_input {
      * @return string
      */
     public function contents_to_maxima($contents) {
-        return $this->get_input_ddl_value($contents[0]);
+        return $contents[0];
     }
 
     /* This function always returns an array where the key is the key in the ddlvalues.
@@ -344,7 +355,6 @@ class stack_dropdown_input extends stack_input {
     }
 
     public function render(stack_input_state $state, $fieldname, $readonly, $tavalue) {
-
         if ($this->errors) {
             return $this->render_error($this->errors);
         }
@@ -356,7 +366,7 @@ class stack_dropdown_input extends stack_input {
 
         $select = 0;
         if (array_key_exists(0, $selected)) {
-            $select = $selected[0];
+            $select = $this->get_input_ddl_key($selected[0]);
         }
 
         $inputattributes = array();
@@ -372,12 +382,56 @@ class stack_dropdown_input extends stack_input {
             unset($values['']);
         }
 
-        $result .= html_writer::select($values, $fieldname, $select,
+        $result .= html_writer::select($values, $fieldname.'_mcq', $select,
             $notanswered, $inputattributes);
 
+        if ($this->algebraic) {
+            $contents = $state->contents;
+            // If the student has selected an MCQ choice we don't put it in the algebraic input.
+            if ($select > 0) {
+                $contents = '';
+            }
+            $result .= $this->render_algebraic($contents, $fieldname, $readonly, $tavalue);
+        }
         return $result;
     }
 
+    /*
+     * Create the optional "algebraic" input type.
+     */
+    protected function render_algebraic($contents, $fieldname, $readonly, $tavalue) {
+        // This code is largely duplicated from algebraic input.
+        $size = $this->parameters['boxWidth'] * 0.9 + 0.1;
+        $attributes = array(
+            'type'  => 'text',
+            'name'  => $fieldname,
+            'id'    => $fieldname,
+            'size'  => $this->parameters['boxWidth'] * 1.1,
+            'style' => 'width: '.$size.'em'
+        );
+
+        if ($this->is_blank_response($contents)) {
+            $field = 'value';
+            if ($this->parameters['syntaxAttribute'] == '1') {
+                $field = 'placeholder';
+            }
+            $attributes[$field] = stack_utils::logic_nouns_sort($this->parameters['syntaxHint'], 'remove');
+        } else {
+            if ($this->ddltype == 'checkbox') {
+                // Normally we'd take all elements of the contents array and make them into a list.
+                // Here we only have space to put one into the algebraic input, and we don't want a list.
+                $attributes['value'] = reset($contents);
+            } else {
+                $attributes['value'] = $this->contents_to_maxima($contents);
+            }
+        }
+
+        if ($readonly) {
+            $attributes['readonly'] = 'readonly';
+        }
+
+        return $this->algebraictext . html_writer::empty_tag('input', $attributes);
+    }
     /**
      * Get the input variable that this input expects to process.
      * All the variable names should start with $this->name.
@@ -386,7 +440,7 @@ class stack_dropdown_input extends stack_input {
     public function get_expected_data() {
         $expected = array();
         $expected[$this->name] = PARAM_RAW;
-
+        $expected[$this->name.'_mcq'] = PARAM_RAW;
         if ($this->requires_validation()) {
             $expected[$this->name . '_val'] = PARAM_RAW;
         }
@@ -406,9 +460,19 @@ class stack_dropdown_input extends stack_input {
     public static function get_parameters_defaults() {
 
         return array(
-            'mustVerify'     => false,
-            'showValidation' => 0,
-            'options'        => '',
+            'mustVerify'         => false,
+            'showValidation'     => 0,
+            'options'            => '',
+            'boxWidth'           => 15,
+            'strictSyntax'       => false,
+            'insertStars'        => 0,
+            'syntaxHint'         => '',
+            'syntaxAttribute'    => 0,
+            'forbidWords'        => '',
+            'allowWords'         => '',
+            'forbidFloats'       => true,
+            'lowestTerms'        => true,
+            'sameType'           => true
         );
     }
 
@@ -423,6 +487,14 @@ class stack_dropdown_input extends stack_input {
     }
 
     /**
+     * @return string the teacher's answer, displayed to the student in the general feedback.
+     */
+    public function get_teacher_answer_display($value, $display) {
+        // Can we really ignore the $value and $display inputs here and rely on the internal state?
+        return stack_string('teacheranswershow_disp', array('display' => $this->teacheranswerdisplay));
+    }
+
+    /**
      * Transforms a Maxima expression into an array of raw inputs which are part of a response.
      * Most inputs are very simple, but textarea and matrix need more here.
      * @param array|string $in
@@ -430,24 +502,18 @@ class stack_dropdown_input extends stack_input {
      */
     public function maxima_to_response_array($in) {
         if ('' == $in) {
-            return array($this->name = '');
+            return array($this->name . '_mcq' => '');
         }
 
-        $ddlkey = $this->get_input_ddl_key($in);
-        $response[$this->name] = $ddlkey;
+        $response[$this->name . '_mcq'] = $this->get_input_ddl_key($in);
 
         if ($this->requires_validation()) {
-            $response[$this->name . '_val'] = $in;
+            $response[$this->name . '_val'] = $this->get_input_ddl_key($in);
         }
-        return $response;
-    }
+        // The name field is used by the question testing mechanism for the full answer.
+        $response[$this->name] = $in;
 
-    /**
-     * @return string the teacher's answer, displayed to the student in the general feedback.
-     */
-    public function get_teacher_answer_display($value, $display) {
-        // Can we really ignore the $value and $display inputs here and rely on the internal state?
-        return stack_string('teacheranswershow_disp', array('display' => $this->teacheranswerdisplay));
+        return $response;
     }
 
     /**
@@ -458,9 +524,18 @@ class stack_dropdown_input extends stack_input {
      * @access public
      */
     public function response_to_contents($response) {
-        $contents = array();
-        if (array_key_exists($this->name, $response)) {
-            $contents[] = (int) $response[$this->name];
+        $mcq = false;
+        if (array_key_exists($this->name.'_mcq', $response)) {
+            $key = (int) $response[$this->name.'_mcq'];
+            $mcq = $this->get_input_ddl_value($key);
+        }
+        $alg = false;
+        if ($this->algebraic && array_key_exists($this->name, $response)) {
+            $alg = trim($response[$this->name]);
+        }
+        $contents[0] = $mcq;
+        if ($this->algebraic && $alg) {
+            $contents[0] = $alg;
         }
         return $contents;
     }
@@ -473,6 +548,9 @@ class stack_dropdown_input extends stack_input {
      *      string if the input is valid - at least according to this test.
      */
     protected function is_blank_response($contents) {
+        if ('' == $contents) {
+            return true;
+        }
         $allblank = true;
         foreach ($contents as $val) {
             if (!('' == trim($val)) && !('0' == trim($val))) {
@@ -495,7 +573,9 @@ class stack_dropdown_input extends stack_input {
         if (array_key_exists($key, $this->ddlvalues)) {
             return $this->ddlvalues[$key]['value'];
         }
-        throw new stack_exception('stack_dropdown_input: could not find a value for key '.$key);
+        if (!$this->algebraic) {
+            throw new stack_exception('stack_dropdown_input: could not find a value for key '.$key);
+        }
 
         return false;
     }
@@ -506,7 +586,9 @@ class stack_dropdown_input extends stack_input {
                 return $key;
             }
         }
-        $this->errors[] = stack_string('ddl_unknown', $value);
+        if (!$this->algebraic) {
+            $this->errors[] = stack_string('ddl_unknown', $value);
+        }
 
         return false;
     }

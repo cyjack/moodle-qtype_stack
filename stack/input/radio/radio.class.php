@@ -38,23 +38,22 @@ class stack_radio_input extends stack_dropdown_input {
             return $this->render_error($this->errors);
         }
 
-        // Create html.
-        $result = '';
-        $values = $this->get_choices();
         $selected = $state->contents;
+        $select = 0;
+        if (array_key_exists(0, $selected)) {
+            $select = $this->get_input_ddl_key($selected[0]);
+        }
 
-        $selected = array_flip($state->contents);
         $radiobuttons = array();
-        $classes = array();
-
+        $values = $this->get_choices();
         foreach ($values as $key => $ansid) {
             $inputattributes = array(
                 'type' => 'radio',
-                'name' => $fieldname,
+                'name' => $fieldname.'_mcq',
                 'value' => $key,
                 'id' => $fieldname.'_'.$key
             );
-            if (array_key_exists($key, $selected)) {
+            if ($select === $key) {
                 $inputattributes['checked'] = 'checked';
             }
             if ($readonly) {
@@ -67,13 +66,20 @@ class stack_radio_input extends stack_dropdown_input {
             }
         }
 
-        $result = '';
-
-        $result .= html_writer::start_tag('div', array('class' => 'answer'));
+        $result = html_writer::start_tag('div', array('class' => 'answer'));
         foreach ($radiobuttons as $key => $radio) {
             $result .= html_writer::tag('div', $radio);
         }
         $result .= html_writer::end_tag('div');
+
+        if ($this->algebraic) {
+            $contents = $state->contents;
+            // If the student has selected an MCQ choice we don't put it in the algebraic input.
+            if ($select > 0) {
+                $contents = '';
+            }
+            $result .= $this->render_algebraic($contents, $fieldname, $readonly, $tavalue);
+        }
 
         return $result;
     }

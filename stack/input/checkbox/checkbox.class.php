@@ -45,36 +45,38 @@ class stack_checkbox_input extends stack_dropdown_input {
     public function contents_to_maxima($contents) {
         $vals = array();
         foreach ($contents as $key) {
-            $vals[] = $this->get_input_ddl_value($key);
+            if (trim($key) != '') {
+                $vals[] = $key;
+            }
         }
-        if ($vals == array( 0 => '')) {
+        if ($vals == array()) {
             return '';
         }
         return '['.implode(',', $vals).']';
     }
 
     public function render(stack_input_state $state, $fieldname, $readonly, $tavalue) {
+
         if ($this->errors) {
             return $this->render_error($this->errors);
         }
 
-        // Create html.
-        $result = '';
-        $values = $this->get_choices();
-        $selected = $state->contents;
-
         $selected = array_flip($state->contents);
+
         $radiobuttons = array();
-        $classes = array();
+        $values = $this->get_choices();
         foreach ($values as $key => $ansid) {
+            $val = $this->get_input_ddl_value($key);
             $inputattributes = array(
                 'type' => 'checkbox',
-                'name' => $fieldname.'_'.$key,
+                'name' => $fieldname.'_mcq_'.$key,
                 'value' => $key,
-                'id' => $fieldname.'_'.$key
+                'id' => $fieldname.'_mcq_'.$key
             );
-            if (array_key_exists($key, $selected)) {
+            if (array_key_exists($val, $selected)) {
                 $inputattributes['checked'] = 'checked';
+                // Now remove it.
+                unset($selected[$val]);
             }
             if ($readonly) {
                 $inputattributes['disabled'] = 'disabled';
@@ -82,13 +84,15 @@ class stack_checkbox_input extends stack_dropdown_input {
             $radiobuttons[] = html_writer::empty_tag('input', $inputattributes) . html_writer::tag('label', $ansid);
         }
 
-        $result = '';
-
-        $result .= html_writer::start_tag('div', array('class' => 'answer'));
+        $result = html_writer::start_tag('div', array('class' => 'answer'));
         foreach ($radiobuttons as $key => $radio) {
             $result .= html_writer::tag('div', $radio);
         }
         $result .= html_writer::end_tag('div');
+
+        if ($this->algebraic) {
+            $result .= $this->render_algebraic(array_flip($selected), $fieldname, $readonly, $tavalue);
+        }
 
         return $result;
     }
@@ -102,7 +106,7 @@ class stack_checkbox_input extends stack_dropdown_input {
         $expected = array();
         $expected[$this->name] = PARAM_RAW;
         foreach ($this->ddlvalues as $key => $val) {
-            $expected[$this->name.'_'.$key] = PARAM_RAW;
+            $expected[$this->name.'_mcq_'.$key] = PARAM_RAW;
         }
 
         if ($this->requires_validation()) {
@@ -118,18 +122,22 @@ class stack_checkbox_input extends stack_dropdown_input {
      * @return string
      */
     public function maxima_to_response_array($in) {
+
         if ('' == $in || '[]' == $in) {
             return array($this->name = '');
         }
-
         $tc = stack_utils::list_to_array($in, false);
         $response = array();
         foreach ($tc as $key => $val) {
             $ddlkey = $this->get_input_ddl_key($val);
-            $response[$this->name.'_'.$ddlkey] = $ddlkey;
+            if ($ddlkey) {
+                $response[$this->name.'_mcq_'.$ddlkey] = $ddlkey;
+            } else {
+                if ($this->algebraic) {
+                    $response[$this->name] = $val;
+                }
+            }
         }
-        // The name field is used by the question testing mechanism for the full answer.
-        $response[$this->name] = $in;
 
         if ($this->requires_validation()) {
             $response[$this->name . '_val'] = $in;
@@ -146,13 +154,19 @@ class stack_checkbox_input extends stack_dropdown_input {
      */
     public function response_to_contents($response) {
         // Did the student chose the "Not answered" response?
-        if (array_key_exists($this->name.'_', $response)) {
+        if (array_key_exists($this->name.'_mcq_', $response)) {
                 return array();
         }
         $contents = array();
         foreach ($this->ddlvalues as $key => $val) {
-            if (array_key_exists($this->name.'_'.$key, $response)) {
-                $contents[] = (int) $response[$this->name.'_'.$key];
+            if (array_key_exists($this->name.'_mcq_'.$key, $response)) {
+                $contents[] = $val['value'];
+            }
+        }
+        if ($this->algebraic && array_key_exists($this->name, $response)) {
+            $alginput = trim($response[$this->name]);
+            if ($alginput != '') {
+                $contents[] = $alginput;
             }
         }
         return $contents;
